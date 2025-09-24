@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLOv8L Detection and Tracking</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .video-container {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .video-section {
+            flex: 1;
+            min-width: 300px;
+        }
+        video, #processedVideo {
+            width: 100%;
+            max-width: 600px;
+            height: auto;
+            border: 2px solid #333;
+            border-radius: 8px;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .start-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .stop-btn {
+            background-color: #f44336;
+            color: white;
+        }
+        .camera-btn {
+            background-color: #2196F3;
+            color: white;
+        }
+        #status {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YOLOv10 Detection and Tracking</h1>
+        
+        <div id="status">Status: Ready</div>
+        
+        <div class="controls">
+            <button id="startCamera" class="camera-btn">Start Camera</button>
+            <button id="startProcessing" class="start-btn">Start Processing</button>
+            <button id="stopProcessing" class="stop-btn">Stop Processing</button>
+        </div>
+        
+        <div class="video-container">
+            <div class="video-section">
+                <h3>Camera Input</h3>
+                <video id="cameraVideo" autoplay muted playsinline></video>
+                <canvas id="canvas" style="display: none;"></canvas>
+            </div>
+            <div class="video-section">
+                <h3>Processed Output</h3>
+                <img id="processedVideo" alt="Processed video will appear here">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const video = document.getElementById('cameraVideo');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const processedVideo = document.getElementById('processedVideo');
+        const statusDiv = document.getElementById('status');
+        
+        let stream = null;
+        let isProcessing = false;
+        let frameInterval = null;
+        
+        // Socket events
+        socket.on('connect', function() {
+            statusDiv.textContent = 'Status: Connected to server';
+        });
+        
+        socket.on('status', function(data) {
+            statusDiv.textContent = 'Status: ' + data.msg;
+        });
+        
+        socket.on('processed_frame', function(data) {
+            processedVideo.src = 'data:image/jpeg;base64,' + data.frame;
+        });
+        
+        // Camera controls
+        document.getElementById('startCamera').addEventListener('click', async function() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 1280, height: 720 } 
+                });
+                video.srcObject = stream;
+                statusDiv.textContent = 'Status: Camera started';
+            } catch (err) {
+                statusDiv.textContent = 'Status: Error accessing camera - ' + err.message;
+            }
+        });
+        
+        // Processing controls
+        document.getElementById('startProcessing').addEventListener('click', function() {
+            if (!stream) {
+                alert('Please start camera first');
+                return;
+            }
+            
+            socket.emit('start_processing');
+            isProcessing = true;
+            
+            // Start sending frames
+            frameInterval = setInterval(function() {
+                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0);
+                    
+                    const frameData = canvas.toDataURL('image/jpeg', 0.8);
+                    socket.emit('frame_data', { frame: frameData });
+                }
+            }, 100); // Send frame every 100ms
+        });
+        
+        document.getElementById('stopProcessing').addEventListener('click', function() {
+            socket.emit('stop_processing');
+            isProcessing = false;
+            
+            if (frameInterval) {
+                clearInterval(frameInterval);
+                frameInterval = null;
+            }
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
+</body>
+</html>
