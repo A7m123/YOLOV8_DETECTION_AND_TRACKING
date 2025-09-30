@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YOLOv8L Detection and Tracking</title>
+    <title>YOLO Detection & Tracking Stream</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
-            text-align: center;
             margin: 0;
             padding: 20px;
             background-color: #f0f0f0;
@@ -16,157 +15,721 @@
         .container {
             max-width: 1200px;
             margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
         .video-container {
             display: flex;
-            justify-content: space-around;
             flex-wrap: wrap;
             gap: 20px;
-            margin: 20px 0;
+            margin-bottom: 20px;
         }
-        .video-section {
+        .video-wrapper {
             flex: 1;
             min-width: 300px;
         }
-        video, #processedVideo {
+        video, canvas {
             width: 100%;
-            max-width: 600px;
-            height: auto;
-            border: 2px solid #333;
-            border-radius: 8px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
         }
         .controls {
+            text-align: center;
             margin: 20px 0;
         }
         button {
             padding: 10px 20px;
-            margin: 5px;
+            margin: 0 10px;
             font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
             border: none;
             border-radius: 5px;
-            cursor: pointer;
         }
-        .start-btn {
-            background-color: #4CAF50;
-            color: white;
+        button:hover {
+            background-color: #0056b3;
         }
-        .stop-btn {
-            background-color: #f44336;
-            color: white;
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
         }
-        .camera-btn {
-            background-color: #2196F3;
-            color: white;
-        }
-        #status {
+        .status {
+            text-align: center;
             margin: 10px 0;
             padding: 10px;
-            background-color: #ddd;
             border-radius: 5px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+        .info {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .face-controls {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .face-controls h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+            align-items: center;
+        }
+        
+        .input-group input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        
+        .face-list {
+            margin: 10px 0;
+        }
+        
+        .face-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            margin: 5px 0;
+        }
+        
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+        
+        .face-status {
+            margin: 10px 0;
+            padding: 8px;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>YOLOv10 Detection and Tracking</h1>
-        
-        <div id="status">Status: Ready</div>
+        <h1>OPTIMIZED YOLO Detection & Tracking with Face Recognition</h1>
         
         <div class="controls">
-            <button id="startCamera" class="camera-btn">Start Camera</button>
-            <button id="startProcessing" class="start-btn">Start Processing</button>
-            <button id="stopProcessing" class="stop-btn">Stop Processing</button>
+            <button id="startBtn">Start Camera</button>
+            <button id="stopBtn" disabled>Stop Camera</button>
+            <button id="statsBtn">Get Stats</button>
         </div>
-        
+
+        <div id="status" class="status disconnected">
+            Disconnected from server
+        </div>
+
+        <div id="warning" class="status warning" style="display: none;">
+            <!-- Warning messages will appear here -->
+        </div>
+
+        <!-- Face Recognition Controls -->
+        <div class="face-controls">
+            <h3>Face Recognition</h3>
+            
+            <div class="input-group">
+                <input type="text" id="faceName" placeholder="Enter your name..." maxlength="50">
+                <button id="saveFaceBtn">Save My Face</button>
+                <button id="refreshFacesBtn">Refresh List</button>
+            </div>
+            
+            <div id="faceStatus" class="face-status" style="display: none;"></div>
+            
+            <div class="face-list">
+                <strong>Saved Faces:</strong>
+                <div id="savedFacesList">
+                    <div style="color: #666; font-style: italic;">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="fps">0</div>
+                <div class="stat-label">Client FPS</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="serverFps">0</div>
+                <div class="stat-label">Server FPS</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="latency">0ms</div>
+                <div class="stat-label">Latency</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="queueSize">0</div>
+                <div class="stat-label">Queue</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="workerId">-</div>
+                <div class="stat-label">Worker</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="detectedObjects">0</div>
+                <div class="stat-label">Objects</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="processingTime">0ms</div>
+                <div class="stat-label">Process Time</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="recognizedFaces">0</div>
+                <div class="stat-label">Known Faces</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="savedFacesCount">0</div>
+                <div class="stat-label">Saved Faces</div>
+            </div>
+        </div>
+
         <div class="video-container">
-            <div class="video-section">
-                <h3>Camera Input</h3>
-                <video id="cameraVideo" autoplay muted playsinline></video>
-                <canvas id="canvas" style="display: none;"></canvas>
+            <div class="video-wrapper">
+                <h3>Original Camera</h3>
+                <video id="video" autoplay playsinline></video>
             </div>
-            <div class="video-section">
-                <h3>Processed Output</h3>
-                <img id="processedVideo" alt="Processed video will appear here">
+            <div class="video-wrapper">
+                <h3>YOLO Detection & Tracking</h3>
+                <canvas id="output"></canvas>
             </div>
+        </div>
+
+        <div class="info">
+            <p id="timestamp">No frames received yet</p>
+            <p>Client ID: <span id="clientId">-</span></p>
+            <p>YOLO Status: <span id="yoloStatus">Initializing...</span></p>
         </div>
     </div>
 
     <script>
-        const socket = io();
-        const video = document.getElementById('cameraVideo');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const processedVideo = document.getElementById('processedVideo');
-        const statusDiv = document.getElementById('status');
-        
-        let stream = null;
-        let isProcessing = false;
-        let frameInterval = null;
-        
-        // Socket events
-        socket.on('connect', function() {
-            statusDiv.textContent = 'Status: Connected to server';
-        });
-        
-        socket.on('status', function(data) {
-            statusDiv.textContent = 'Status: ' + data.msg;
-        });
-        
-        socket.on('processed_frame', function(data) {
-            processedVideo.src = 'data:image/jpeg;base64,' + data.frame;
-        });
-        
-        // Camera controls
-        document.getElementById('startCamera').addEventListener('click', async function() {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { width: 1280, height: 720 } 
+        class OptimizedCameraStream {
+            constructor() {
+                this.socket = null;
+                this.video = document.getElementById('video');
+                this.canvas = document.getElementById('output');
+                this.ctx = this.canvas.getContext('2d');
+                this.stream = null;
+                this.isStreaming = false;
+                
+                // Performance tracking
+                this.frameCount = 0;
+                this.lastFpsUpdate = Date.now();
+                this.fps = 0;
+                this.lastFrameTime = 0;
+                this.latency = 0;
+                this.clientId = null;
+                this.detectedObjects = 0;
+                
+                // Enhanced performance tracking
+                this.serverFps = 0;
+                this.serverFrameCount = 0;
+                this.lastServerFpsUpdate = Date.now();
+                this.processingTime = 0;
+                
+                // Face recognition tracking
+                this.recognizedFaces = [];
+                this.savedFaces = [];
+                
+                // Optimized frame rate control
+                this.targetFps = 20;  // Increased target FPS
+                this.frameInterval = 1000 / this.targetFps;
+                this.lastFrameSent = 0;
+                
+                this.initializeSocket();
+                this.setupEventListeners();
+                this.setupFaceRecognitionListeners();
+            }
+
+            initializeSocket() {
+                this.socket = io();
+                
+                this.socket.on('connect', () => {
+                    this.updateStatus('Connected to server', true);
+                    console.log('Connected to server');
                 });
-                video.srcObject = stream;
-                statusDiv.textContent = 'Status: Camera started';
-            } catch (err) {
-                statusDiv.textContent = 'Status: Error accessing camera - ' + err.message;
+
+                this.socket.on('disconnect', () => {
+                    this.updateStatus('Disconnected from server', false);
+                    console.log('Disconnected from server');
+                });
+
+                this.socket.on('connection_response', (data) => {
+                    this.clientId = data.client_id;
+                    document.getElementById('clientId').textContent = this.clientId;
+                    console.log('Server response:', data);
+                });
+
+                this.socket.on('processed_frame', (data) => {
+                    this.displayProcessedFrame(data);
+                });
+
+                this.socket.on('error', (data) => {
+                    console.error('Server error:', data.message);
+                    this.showWarning(data.message);
+                });
+
+                this.socket.on('queue_warning', (data) => {
+                    console.warn('Queue warning:', data.message);
+                    this.showWarning(data.message);
+                    document.getElementById('queueSize').textContent = data.queue_size;
+                });
+
+                this.socket.on('server_stats', (data) => {
+                    console.log('Server stats:', data);
+                });
+                
+                // Face recognition event listeners
+                this.socket.on('face_save_response', (data) => {
+                    this.handleFaceSaveResponse(data);
+                });
+                
+                this.socket.on('saved_faces_list', (data) => {
+                    this.updateSavedFacesList(data.faces);
+                });
+                
+                this.socket.on('face_delete_response', (data) => {
+                    this.handleFaceDeleteResponse(data);
+                });
             }
-        });
-        
-        // Processing controls
-        document.getElementById('startProcessing').addEventListener('click', function() {
-            if (!stream) {
-                alert('Please start camera first');
-                return;
+
+            updateStatus(message, isConnected) {
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = message;
+                statusEl.className = `status ${isConnected ? 'connected' : 'disconnected'}`;
             }
-            
-            socket.emit('start_processing');
-            isProcessing = true;
-            
-            // Start sending frames
-            frameInterval = setInterval(function() {
-                if (video.videoWidth > 0 && video.videoHeight > 0) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    ctx.drawImage(video, 0, 0);
+
+            showWarning(message) {
+                const warningEl = document.getElementById('warning');
+                warningEl.textContent = message;
+                warningEl.style.display = 'block';
+                setTimeout(() => {
+                    warningEl.style.display = 'none';
+                }, 5000);
+            }
+
+            async startCamera() {
+                try {
+                    this.stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { 
+                            width: { ideal: 640 },
+                            height: { ideal: 480 },
+                            frameRate: { ideal: 30 }
+                        } 
+                    });
                     
-                    const frameData = canvas.toDataURL('image/jpeg', 0.8);
-                    socket.emit('frame_data', { frame: frameData });
+                    this.video.srcObject = this.stream;
+                    this.isStreaming = true;
+                    
+                    // Set canvas size to match video
+                    this.video.addEventListener('loadedmetadata', () => {
+                        this.canvas.width = this.video.videoWidth;
+                        this.canvas.height = this.video.videoHeight;
+                    });
+                    
+                    this.startOptimizedFrameCapture();
+                    this.updateButtons(true);
+                    
+                } catch (error) {
+                    console.error('Error accessing camera:', error);
+                    alert('Cannot access camera: ' + error.message);
                 }
-            }, 100); // Send frame every 100ms
-        });
-        
-        document.getElementById('stopProcessing').addEventListener('click', function() {
-            socket.emit('stop_processing');
-            isProcessing = false;
+            }
+
+            stopCamera() {
+                this.isStreaming = false;
+                
+                if (this.stream) {
+                    this.stream.getTracks().forEach(track => track.stop());
+                    this.stream = null;
+                }
+                
+                this.video.srcObject = null;
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.updateButtons(false);
+                
+                document.getElementById('timestamp').textContent = 'Camera stopped';
+                document.getElementById('fps').textContent = '0';
+                document.getElementById('latency').textContent = '0ms';
+            }
+
+            startOptimizedFrameCapture() {
+                const captureFrame = () => {
+                    if (!this.isStreaming) return;
+                    
+                    const now = Date.now();
+                    const elapsed = now - this.lastFrameSent;
+                    
+                    // Control frame rate to avoid overloading
+                    if (elapsed > this.frameInterval) {
+                        this.captureAndSendFrame();
+                        this.lastFrameSent = now - (elapsed % this.frameInterval);
+                    }
+                    
+                    requestAnimationFrame(captureFrame);
+                };
+                
+                captureFrame();
+            }
+
+            captureAndSendFrame() {
+                if (!this.isStreaming || !this.socket.connected) return;
+                
+                try {
+                    const captureStart = Date.now();
+                    
+                    // Create temporary canvas to capture frame
+                    const tempCanvas = document.createElement('canvas');
+                    const tempCtx = tempCanvas.getContext('2d');
+                    
+                    // Set canvas dimensions
+                    tempCanvas.width = this.video.videoWidth || 640;
+                    tempCanvas.height = this.video.videoHeight || 480;
+                    
+                    // Validate video dimensions
+                    if (tempCanvas.width === 0 || tempCanvas.height === 0) {
+                        console.warn('Invalid video dimensions, skipping frame');
+                        return;
+                    }
+                    
+                    // Draw the video frame
+                    tempCtx.drawImage(this.video, 0, 0, tempCanvas.width, tempCanvas.height);
+                    
+                    // Convert to base64 with quality control
+                    const imageData = tempCanvas.toDataURL('image/jpeg', 0.8);
+                    
+                    // Validate image data
+                    if (!imageData || imageData.length < 100) {
+                        console.warn('Invalid image data, skipping frame');
+                        return;
+                    }
+                    
+                    // Send to server with timestamp for latency calculation
+                    this.socket.emit('video_frame', {
+                        image: imageData,
+                        width: tempCanvas.width,
+                        height: tempCanvas.height,
+                        client_timestamp: captureStart
+                    });
+                    
+                } catch (error) {
+                    console.error('Error capturing frame:', error);
+                }
+            }
+
+            displayProcessedFrame(data) {
+                const receiveTime = Date.now();
+                const img = new Image();
+                
+                img.onload = () => {
+                    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                    this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
+                    
+                    // Update display info
+                    document.getElementById('timestamp').textContent = 
+                        `Last frame: ${data.timestamp}`;
+                    
+                    // Update all stats
+                    if (data.worker_id !== undefined) {
+                        document.getElementById('workerId').textContent = data.worker_id;
+                    }
+                    if (data.queue_size !== undefined) {
+                        document.getElementById('queueSize').textContent = data.queue_size;
+                    }
+                    if (data.detected_objects !== undefined) {
+                        document.getElementById('detectedObjects').textContent = data.detected_objects;
+                    }
+                    if (data.processing_time !== undefined) {
+                        document.getElementById('processingTime').textContent = `${data.processing_time}ms`;
+                    }
+                    
+                    // Calculate client FPS
+                    this.frameCount++;
+                    const now = Date.now();
+                    if (now - this.lastFpsUpdate >= 1000) {
+                        this.fps = this.frameCount;
+                        this.frameCount = 0;
+                        this.lastFpsUpdate = now;
+                        document.getElementById('fps').textContent = this.fps;
+                    }
+                    
+                    // Calculate server FPS
+                    this.serverFrameCount++;
+                    if (now - this.lastServerFpsUpdate >= 1000) {
+                        this.serverFps = this.serverFrameCount;
+                        this.serverFrameCount = 0;
+                        this.lastServerFpsUpdate = now;
+                        document.getElementById('serverFps').textContent = this.serverFps;
+                    }
+                    
+                    // Calculate latency
+                    this.latency = receiveTime - this.lastFrameSent;
+                    document.getElementById('latency').textContent = `${this.latency}ms`;
+                    
+                    // Update YOLO status
+                    document.getElementById('yoloStatus').textContent = 'Optimized & Active';
+                    
+                    // Update face recognition stats
+                    if (data.recognized_faces !== undefined) {
+                        this.recognizedFaces = data.recognized_faces;
+                        const knownFaces = this.recognizedFaces.filter(f => f.name !== "Unknown");
+                        document.getElementById('recognizedFaces').textContent = knownFaces.length;
+                    }
+                };
+                img.src = data.image;
+            }
+
+            updateButtons(isStreaming) {
+                document.getElementById('startBtn').disabled = isStreaming;
+                document.getElementById('stopBtn').disabled = !isStreaming;
+            }
+
+            setupEventListeners() {
+                document.getElementById('startBtn').addEventListener('click', () => {
+                    this.startCamera();
+                });
+
+                document.getElementById('stopBtn').addEventListener('click', () => {
+                    this.stopCamera();
+                });
+
+                document.getElementById('statsBtn').addEventListener('click', () => {
+                    if (this.socket.connected) {
+                        this.socket.emit('client_stats');
+                    }
+                });
+            }
+
+            setupFaceRecognitionListeners() {
+                console.log('Setting up face recognition listeners...');
+                
+                document.getElementById('saveFaceBtn').addEventListener('click', () => {
+                    console.log('Save face button clicked');
+                    this.saveFace();
+                });
+                
+                document.getElementById('refreshFacesBtn').addEventListener('click', () => {
+                    console.log('Refresh faces button clicked');
+                    this.getSavedFaces();
+                });
+                
+                document.getElementById('faceName').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        console.log('Enter key pressed in face name input');
+                        this.saveFace();
+                    }
+                });
+                
+                // Load saved faces on startup with delay to ensure connection
+                setTimeout(() => {
+                    console.log('Loading saved faces...');
+                    this.getSavedFaces();
+                }, 3000);
+            }
             
-            if (frameInterval) {
-                clearInterval(frameInterval);
-                frameInterval = null;
+            saveFace() {
+                console.log('saveFace method called');
+                const name = document.getElementById('faceName').value.trim();
+                console.log('Name entered:', name);
+                
+                if (!name) {
+                    this.showFaceStatus('Please enter your name', 'error');
+                    return;
+                }
+                
+                if (!this.isStreaming || !this.socket.connected) {
+                    this.showFaceStatus('Please start the camera and connect to server first', 'error');
+                    return;
+                }
+                
+                // Capture current frame
+                try {
+                    const tempCanvas = document.createElement('canvas');
+                    const tempCtx = tempCanvas.getContext('2d');
+                    
+                    tempCanvas.width = this.video.videoWidth || 640;
+                    tempCanvas.height = this.video.videoHeight || 480;
+                    
+                    console.log('Canvas dimensions:', tempCanvas.width, 'x', tempCanvas.height);
+                    
+                    tempCtx.drawImage(this.video, 0, 0, tempCanvas.width, tempCanvas.height);
+                    const imageData = tempCanvas.toDataURL('image/jpeg', 0.9);
+                    
+                    console.log('Image data length:', imageData.length);
+                    console.log('Socket connected:', this.socket.connected);
+                    
+                    // Send to server
+                    this.socket.emit('save_face', {
+                        image: imageData,
+                        name: name
+                    });
+                    
+                    this.showFaceStatus('Saving face...', 'success');
+                    document.getElementById('saveFaceBtn').disabled = true;
+                    
+                } catch (error) {
+                    console.error('Error capturing image:', error);
+                    this.showFaceStatus('Error capturing image: ' + error.message, 'error');
+                }
             }
-        });
-        
-        // Cleanup on page unload
-        window.addEventListener('beforeunload', function() {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
+            
+            handleFaceSaveResponse(data) {
+                console.log('Face save response:', data);
+                document.getElementById('saveFaceBtn').disabled = false;
+                
+                if (data.success) {
+                    this.showFaceStatus(data.message, 'success');
+                    document.getElementById('faceName').value = '';
+                    if (data.saved_faces) {
+                        this.updateSavedFacesList(data.saved_faces);
+                    }
+                } else {
+                    this.showFaceStatus(data.message, 'error');
+                }
             }
+            
+            handleFaceDeleteResponse(data) {
+                console.log('Face delete response:', data);
+                if (data.success) {
+                    this.showFaceStatus(data.message, 'success');
+                    if (data.saved_faces) {
+                        this.updateSavedFacesList(data.saved_faces);
+                    }
+                } else {
+                    this.showFaceStatus(data.message, 'error');
+                }
+            }
+            
+            getSavedFaces() {
+                console.log('getSavedFaces called, socket connected:', this.socket && this.socket.connected);
+                if (this.socket && this.socket.connected) {
+                    console.log('Emitting get_saved_faces');
+                    this.socket.emit('get_saved_faces');
+                } else {
+                    console.log('Socket not connected, retrying in 2 seconds...');
+                    setTimeout(() => this.getSavedFaces(), 2000);
+                }
+            }
+            
+            updateSavedFacesList(faces) {
+                console.log('Updating saved faces list:', faces);
+                this.savedFaces = faces;
+                const listContainer = document.getElementById('savedFacesList');
+                
+                if (!faces || faces.length === 0) {
+                    listContainer.innerHTML = '<div style="color: #666; font-style: italic;">No saved faces</div>';
+                    document.getElementById('savedFacesCount').textContent = '0';
+                    return;
+                }
+                
+                listContainer.innerHTML = '';
+                faces.forEach(name => {
+                    const faceItem = document.createElement('div');
+                    faceItem.className = 'face-item';
+                    faceItem.innerHTML = `
+                        <span>${name}</span>
+                        <button class="delete-btn" onclick="cameraStream.deleteFace('${name}')">Delete</button>
+                    `;
+                    listContainer.appendChild(faceItem);
+                });
+                
+                document.getElementById('savedFacesCount').textContent = faces.length;
+            }
+            
+            deleteFace(name) {
+                console.log('Deleting face:', name);
+                if (confirm(`Are you sure you want to delete the face "${name}"?`)) {
+                    this.socket.emit('delete_face', { name: name });
+                }
+            }
+            
+            showFaceStatus(message, type) {
+                console.log('Showing face status:', message, type);
+                const statusEl = document.getElementById('faceStatus');
+                statusEl.textContent = message;
+                statusEl.className = `face-status ${type}`;
+                statusEl.style.display = 'block';
+                
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Initialize the application when page loads
+        let cameraStream;
+        window.addEventListener('load', () => {
+            cameraStream = new OptimizedCameraStream();
         });
     </script>
 </body>
